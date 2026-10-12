@@ -5,10 +5,17 @@ status: tested
 created: 2026-10-12
 parameters:
   website: "the domain, in the geuquery line (here media.ccc.de)"
-last_run: 2026-10-12
-result_rows: 49
-result_checksum: "sha256:6b37342e0ef47d7349eb1def7158abdf09e6b13e52b289587a8baa66bcaf9e35"
-runtime: "about 1 s"
+runs:
+  - website: media.ccc.de
+    date: 2026-10-12
+    result_rows: 49
+    result_checksum: "sha256:6b37342e0ef47d7349eb1def7158abdf09e6b13e52b289587a8baa66bcaf9e35"
+    runtime: "about 1 s"
+  - website: nebula.tv
+    date: 2026-10-12
+    result_rows: 10
+    result_checksum: "sha256:f6a3faf4927ab27d7aca751dac96df169c97657b15c35d3c0ab04fe838d70ee7"
+    runtime: "under 1 s"
 related:
   - items_with_property_by_class.md
   - https://www.mediawiki.org/wiki/API:Exturlusage
@@ -54,8 +61,11 @@ Run on 2026-10-12, the first 10 of 49 rows (an item with several classes counts 
 | Q111290948 | presentation in WikidataCon 2019 | 3 |
 | Q11483816 | annual event | 2 |
 
+Run on 2026-10-12 with nebula.tv: human 27, YouTube channel 14, web series 3, podcast show 2, and single items of business, television program, television series season, television series episode and video streaming service.
+
 ## Notes
 
 - Items that link to media.ccc.de are mostly event editions and people; single talks are rare (*lecture* 2, *presentation in WikidataCon 2019* 3). Recordings of talks are usually not items of their own, but a link on the event or the speaker.
+- Items that link to nebula.tv are people and channels, almost never single videos; Wikidata has a [Nebula channel ID (P12337)](https://www.wikidata.org/wiki/Property:P12337) but no Nebula video ID (2026-10-12).
 - The link search covers the statements of items (namespace 0), not their labels or descriptions.
 - The MWAPI service follows the API's continuation only up to a limit; for a website with very many links, check whether the result is complete.

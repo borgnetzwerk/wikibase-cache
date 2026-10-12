@@ -58,5 +58,5 @@ Run on 2026-10-12, the first 15 of 30 rows:
 
 ## Notes
 
-- Wikidata has no common class for videos: items with a YouTube video ID are modelled by their content (single, film, episode, music video). [video recording (Q34508)](https://www.wikidata.org/wiki/Q34508) has 178 direct instances, its subclass [video work (Q110879246)](https://www.wikidata.org/wiki/Q110879246) 1,460 (2026-10-12).
+- Items with a YouTube video ID are classified by their content (single, film, episode, music video), not as videos. Most of the video-like classes sit below [audiovisual work (Q2431196)](https://www.wikidata.org/wiki/Q2431196) (see [superclasses_two_levels.md](superclasses_two_levels.md)); the medium is given by *distribution format* (see [items_with_property_medium_and_form.md](items_with_property_medium_and_form.md)). [video recording (Q34508)](https://www.wikidata.org/wiki/Q34508) has 178 direct instances, its subclass [video work (Q110879246)](https://www.wikidata.org/wiki/Q110879246) 1,460 (2026-10-12).
 - Some items carry the YouTube ID of a related video rather than being one (for example humans or video games).

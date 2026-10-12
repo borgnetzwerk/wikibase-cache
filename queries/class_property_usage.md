@@ -88,10 +88,42 @@ Run on 2026-10-12 for [video recording](https://www.wikidata.org/wiki/Q34508): 1
 
 Look at the subclass tree first ([subclass_tree_instances.md](subclass_tree_instances.md)): a large tree makes the variant expensive, and a tree that mixes techniques, formats and works makes its result hard to read.
 
+## Variant: sample for large classes
+
+For classes with more than about 20,000 instances, profile the first 10,000. The named subqueries (`WITH … AS %name`, `INCLUDE %name`) are a feature of the query service's current engine, Blazegraph: they are evaluated first and once, so the sample is drawn before the expensive part. The same query with an ordinary subquery timed out (HTTP 504).
+
+```sparql
+SELECT ?property ?propertyLabel ?instances
+WITH {
+  SELECT ?item WHERE {
+    ?item wdt:P31 wd:Q43229 .
+  }
+  LIMIT 10000
+} AS %sample
+WITH {
+  SELECT ?direct (COUNT(DISTINCT ?item) AS ?instances) WHERE {
+    INCLUDE %sample
+    ?item ?direct [] .
+  }
+  GROUP BY ?direct
+} AS %counts
+WHERE {
+  INCLUDE %counts
+  ?property wikibase:directClaim ?direct .
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+ORDER BY DESC(?instances)
+LIMIT 100
+```
+
+Run on 2026-10-12 for [organization](https://www.wikidata.org/wiki/Q43229) (about 530,000 direct instances): 100 rows, `sha256:acd270ecfd458a79845a485f3d71f3ec0d028fc293b73f4689a308d7303300a5`, about 7 s. Of 10,000: P17 *country* 8080, P571 *inception* 6741, P856 *official website* 5595, P2671 *Google Knowledge Graph ID* 5271, P159 *headquarters location* 4493, P646 *Freebase ID* 4262, P214 *VIAF cluster ID* 4255, P1454 *legal form* 3229, P373 *Commons category* 3110, P244 *Library of Congress Authorities ID* 2802, P227 *GND ID* 2605, P452 *industry* 2482.
+
+The first 10,000 are not a random sample but whatever order the engine returns; read the shares as hints, not as measurements. Named subqueries are specific to the current engine and may not work after the move to a new backend.
+
 ## Notes
 
-- The main query counts direct instances only; the variant above includes subclasses.
+- The main query counts direct instances only; the variants above include subclasses or use a sample.
 - The query aggregates in a subquery first and adds labels only to the result rows. A first version that joined the properties and labels before grouping exceeded the 60-second limit of the [Wikidata Query Service](https://www.mediawiki.org/wiki/Wikidata_Query_Service/User_Manual) (HTTP 504) for podcast episodes.
-- Classes with hundreds of thousands of instances or more (for example [organization](https://www.wikidata.org/wiki/Q43229) with about 530,000 direct instances) are likely to exceed the limit; use a sample or a dump instead.
-- Few instances do not mean few things of that kind: video recording has 178 direct instances, because Wikidata models videos by their content type instead (see [items_with_property_by_class.md](items_with_property_by_class.md)).
+- Classes with hundreds of thousands of instances or more (for example [organization](https://www.wikidata.org/wiki/Q43229) with about 530,000 direct instances) exceed the limit; use the sample variant or a dump instead.
+- Few instances do not mean few things of that kind: video recording has 178 direct instances because in Wikidata it is a technique, not a kind of work; videos are instances of the subclasses of [audiovisual work (Q2431196)](https://www.wikidata.org/wiki/Q2431196) such as film or episode (see [superclasses_two_levels.md](superclasses_two_levels.md) and [items_with_property_by_class.md](items_with_property_by_class.md)).
 - Counts change as Wikidata is edited; each checksum identifies the result of its run.

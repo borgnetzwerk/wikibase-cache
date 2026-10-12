@@ -43,7 +43,26 @@ Run on 2026-10-12:
 | Q34770 | language | 9766 |
 | Q34508 | video recording | 178 |
 
+## Variant: with a ceiling, one class
+
+Counts at most 100,001 instances of one class. A result of 100,001 means "at least 100,000"; `?capped` says so explicitly. Use it as the first step for any class whose size is unknown.
+
+```sparql
+SELECT (COUNT(?item) AS ?instances) (COUNT(?item) > 100000 AS ?capped) WHERE {
+  {
+    SELECT ?item WHERE {
+      ?item wdt:P31 wd:Q5 .
+    }
+    LIMIT 100001
+  }
+}
+```
+
+Run on 2026-10-12 for [human (Q5)](https://www.wikidata.org/wiki/Q5): `instances` 100001, `capped` true; `sha256:e40a7f347a31d3bc56d4f8ce6fb235082b45b2494d8a866c8c73783ba368b375`, about 2 s.
+
+The ceiling only works for one class per query. A `LIMIT` inside a subquery applies to the whole subquery, not to each class: with several classes in a `VALUES` line, the first large class takes up the whole ceiling and the others drop out of the result (tried on 2026-10-12 with six classes; only Q5 came back).
+
 ## Notes
 
-- A class with millions of instances makes the whole query exceed the 60-second limit, even when it is only one of several classes in the list: with [human (Q5)](https://www.wikidata.org/wiki/Q5) added, this query timed out (HTTP 504). Leave out classes that are known to be very large.
+- A class with millions of instances makes the uncapped query exceed the 60-second limit, even when it is only one of several classes in the list: with [human (Q5)](https://www.wikidata.org/wiki/Q5) added, the main query timed out (HTTP 504). Count such classes with the ceiling variant.
 - Classes without a class item in Wikidata cannot be counted this way.
