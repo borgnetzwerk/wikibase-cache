@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local operator identification (see operator.example.yaml), never committed
+operator.yaml

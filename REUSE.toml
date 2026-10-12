@@ -1,0 +1,15 @@
+# Licensing of this repository, following the REUSE Specification 3.3 (https://reuse.software/spec-3.3/).
+# Code and queries: MIT. Documentation: CC BY 4.0.
+# The root LICENSE file holds the MIT text with the copyright line filled in; LICENSES/ holds the unaltered SPDX texts.
+# When several annotations match a file, only the last matching one applies (spec, REUSE.toml).
+version = 1
+
+[[annotations]]
+path = "**"
+SPDX-FileCopyrightText = "2026 BorgNetzWerk e.V. (BNW)"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["docs/**", "README.md", "CONTRIBUTING.md", "CHANGELOG.md"]
+SPDX-FileCopyrightText = "2026 BorgNetzWerk e.V. (BNW)"
+SPDX-License-Identifier = "CC-BY-4.0"
