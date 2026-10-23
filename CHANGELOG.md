@@ -19,6 +19,8 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 - Protection against leaked credentials: only entity documents are stored, never whole responses; an event containing a secret, a `Bearer` or `Authorization` header or `debuginfo` is refused.
 - Offline tests against an in-memory Wikibase that echoes request headers like a misconfigured real instance (`tests/`).
 
+- Cache-first fetch modes for any target, Wikidata included: `basic_fetch` (labels, descriptions, aliases, P31, P279), `full_fetch` (the whole entity with revision), `fetch_decision` with rules from the calling project and `expand` over several levels; SPARQL answers stored per query. Every run has a request budget and asks before more than `confirm_requests` requests; `--offline` answers from the store only.
+- Imports: archives of other tools read in place without copying (`imports/<name>/source.yaml`), first format speaker-mining event store v3.
 - Optional `.env` file for secrets, named in the setup; refused inside the repository or the data root; environment variables take precedence.
 
 ### Changed

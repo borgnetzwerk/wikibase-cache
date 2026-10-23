@@ -25,6 +25,7 @@ DEFAULTS = {
     "full_sync_max_entities": 50000,
     "run_max_seconds": 300,
     "run_max_requests": 200,
+    "confirm_requests": 100,  # fetch, expand, sparql: ask before a run that needs more requests than this
 }
 AUTH_METHODS = ("none", "oauth2", "botpassword")
 
@@ -61,6 +62,8 @@ class Target:
     api: str
     namespaces: dict[str, int]
     auth: Auth = field(default_factory=Auth)
+    sparql: str | None = None         # SPARQL endpoint, if the wiki has one
+    languages: list[str] = field(default_factory=lambda: ["en"])  # for basic_fetch
     maxlag: int = DEFAULTS["maxlag"]
     retries: int = DEFAULTS["retries"]
     backoff_base: float = DEFAULTS["backoff_base"]
@@ -71,12 +74,16 @@ class Target:
     full_sync_max_entities: int = DEFAULTS["full_sync_max_entities"]
     run_max_seconds: int = DEFAULTS["run_max_seconds"]
     run_max_requests: int = DEFAULTS["run_max_requests"]
+    confirm_requests: int = DEFAULTS["confirm_requests"]
 
     def to_yaml(self) -> dict:
         data = asdict(self)
         data.pop("name")
         data["auth"] = {k: v for k, v in data["auth"].items() if v is not None and k != "env_file_values"}
-        return {k: v for k, v in data.items() if k in ("api", "namespaces", "auth") or v != DEFAULTS.get(k)}
+        if data["sparql"] is None:
+            data.pop("sparql")
+        return {k: v for k, v in data.items()
+                if k in ("api", "namespaces", "auth", "sparql", "languages") or v != DEFAULTS.get(k)}
 
 
 @dataclass

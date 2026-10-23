@@ -86,6 +86,13 @@ def test_unchanged_wiki_needs_no_entity_requests(target, wiki, tmp_path):
     assert not [c for c in wiki.calls if c.get("action") == "wbgetentities"]
 
 
+def test_entities_lists_stored_documents_by_kind(target, wiki, tmp_path):
+    run(target, wiki, tmp_path)
+    store = Store(tmp_path, "m1")
+    assert [i for i, _ in store.entities(prefix="Q")] == ["Q1", "Q2", "Q3", "Q4", "Q5"]
+    assert [e["id"] for _, e in store.entities(scope="full", prefix="P")] == ["P1"]
+
+
 def test_deleted_entity_is_marked_unlisted(target, wiki, tmp_path):
     run(target, wiki, tmp_path)
     del wiki.entities["Q4"]

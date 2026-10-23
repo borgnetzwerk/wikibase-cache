@@ -32,8 +32,18 @@ class FakeWiki:
         self.entities[entity_id] = {"type": "item" if entity_id[0] == "Q" else "property", "id": entity_id,
                                     "lastrevid": revision, "labels": {"en": {"language": "en", "value": label}}}
 
+    def link(self, entity_id: str, prop: str, target_id: str) -> None:
+        """Add a claim entity_id --prop--> target_id."""
+        statement = {"mainsnak": {"snaktype": "value", "property": prop,
+                                  "datavalue": {"type": "wikibase-entityid", "value": {"id": target_id}}}}
+        self.entities[entity_id].setdefault("claims", {}).setdefault(prop, []).append(statement)
+
     # requests.Session interface
-    def get(self, url: str, params: dict, timeout: float) -> FakeResponse:
+    def get(self, url: str, params: dict, timeout: float, headers: dict | None = None) -> FakeResponse:
+        if url.endswith("/sparql"):
+            self.calls.append({"sparql": params["query"]})
+            return FakeResponse(200, {"head": {"vars": ["x"]}, "results": {"bindings": [
+                {"x": {"type": "literal", "value": f"answer to {params['query'][:20]}"}}]}})
         return self._respond(params)
 
     def post(self, url: str, data: dict, timeout: float) -> FakeResponse:

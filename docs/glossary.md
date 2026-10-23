@@ -2,7 +2,7 @@
 
 The terms used in this repository, each with one meaning. Where a term comes from [speaker-mining](https://github.com/borgnetzwerk/speaker-mining), we keep its meaning and name, and link its origin; that project's [glossary](https://github.com/borgnetzwerk/speaker-mining/blob/main/documentation/Wikidata/archive/2026-04-26_investigation/07_glossary.md) and [naming decisions](https://github.com/borgnetzwerk/speaker-mining/blob/main/documentation/Wikidata/archive/2026-04-26_investigation/11_naming_decisions.md) record why each name was chosen and which earlier names it replaces.
 
-Nothing described here is implemented yet; the terms fix the vocabulary before the code is written.
+The terms were fixed before the code was written; the [README](../README.md) says which of them are implemented.
 
 ## Storage
 
@@ -20,13 +20,17 @@ Nothing described here is implemented yet; the terms fix the vocabulary before t
 
 **`basic_fetch`.** A small fetch with a fixed payload: labels, descriptions and aliases in the configured languages (plus the language-independent default), and the claims *instance of* ([P31](https://www.wikidata.org/wiki/Property:P31)) and *subclass of* ([P279](https://www.wikidata.org/wiki/Property:P279)). Enough to know what an entity is, without everything it links to. Because the payload is fixed, many entities can be fetched in one batched request, which keeps the load on the server low. (speaker-mining; earlier name: *hydration*.)
 
-**`full_fetch`.** Retrieves all claims of one entity (its outgoing statements), with their qualifiers and references. (speaker-mining; earlier name: *expansion*.) Claims of other entities that point to this one (incoming links) are not part of a `full_fetch`; they need a separate SPARQL query, for which no term is fixed yet.
+**`full_fetch`.** Retrieves all claims of an entity (its outgoing statements), with their qualifiers and references, together with the rest of the entity document (sitelinks, revision ID). Like `basic_fetch`, it is batched for many entities. (speaker-mining; earlier name: *expansion*.) Claims of other entities that point to this one (incoming links) are not part of a `full_fetch`; they need a separate SPARQL query, for which no term is fixed yet.
 
 **Fully fetched.** An entity for which a `full_fetch` has been performed at least once.
 
 **`fetch_decision`.** The step that looks at the claims of a fully fetched entity and decides which of the referenced entities are fetched next, and how (`basic_fetch`, `full_fetch` or not at all). It only decides; it fetches nothing itself. The rules for this decision come from the project that uses the tool. The cycle reads `full_fetch` → `fetch_decision` → `full_fetch` → … (speaker-mining; earlier name: *expansion*.)
 
 **Budget.** The maximum number of network requests a run may make. A budget of zero means the tool answers from the entity store only. (speaker-mining.)
+
+**Scope.** How complete a stored version of an entity is: `full` (the whole document), `basic` (what `basic_fetch` keeps), `import-full` and `import-basic` (versions from an import, with the parts and languages the original tool fetched). A `full_fetch` is answered only by `full` or `import-full`.
+
+**Import.** An archive of another tool (for example the event store of speaker-mining) placed below a target's data folder and read in place, so its data is not stored twice.
 
 ## Queries
 

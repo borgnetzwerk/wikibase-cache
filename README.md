@@ -2,7 +2,7 @@
 
 An interface to Wikidata and other Wikibase instances that does not burden their servers: it answers from a long-lived local store first and fetches only what is missing, so results can be reused for years and by many projects.
 
-**Status:** early. Small Wikibase instances can be synced completely (with or without login) and read from the local store. Targeted fetches for large wikis such as Wikidata, SPARQL, `basic_fetch`, `full_fetch` and `fetch_decision` are not implemented yet.
+**Status:** early. Implemented: setup, cache-first `basic_fetch`, `full_fetch`, `fetch_decision`/`expand` and SPARQL for any Wikibase including Wikidata, a complete sync for small wikis, and archives of other tools read in place (speaker-mining). Not yet: incoming links, class hierarchies and the other analyses speaker-mining builds on top of its fetches; a local endpoint that answers like `api.php`.
 
 ## Setup (required)
 
@@ -20,7 +20,7 @@ asks for, and shows you before saving:
 Then add each wiki you want to read:
 
 ```
-python -m wikibase_cache add-target wikidata --api https://www.wikidata.org/w/api.php
+python -m wikibase_cache add-target wikidata --api https://www.wikidata.org/w/api.php --sparql https://query.wikidata.org/sparql --languages de,en,mul
 python -m wikibase_cache add-target mywiki --api https://mywiki.example.org/w/api.php --auth oauth2 --token-env MYWIKI_TOKEN --full-sync
 python -m wikibase_cache add-target otherwiki --api https://otherwiki.example.org/w/api.php --auth botpassword --username-env OTHERWIKI_USER --password-env OTHERWIKI_PASSWORD
 ```
@@ -44,14 +44,38 @@ The User-Agent of every request reads:
 ## Usage
 
 ```
-python -m wikibase_cache sync <target>            # fetch what is missing or changed (network)
+python -m wikibase_cache fetch <target> Q1 Q5     # basic_fetch, cache-first (network only for what is missing)
+python -m wikibase_cache fetch <target> Q5 --full # full_fetch, cache-first
+python -m wikibase_cache expand <target> Q5 --rules rules.yaml --depth 2
+python -m wikibase_cache sparql <target> query.rq # SPARQL, cache-first, prints the JSON result
+python -m wikibase_cache sync <target>            # small wikis: fetch every entity that is missing or changed
 python -m wikibase_cache get <target> Q5          # one entity from the store, as JSON (no network)
 python -m wikibase_cache status <target>          # what the store holds, last runs
 python -m wikibase_cache scan <target>            # check the stored data for secrets and echoed headers
 python -m pytest tests                            # offline tests
 ```
 
-From Python: `from wikibase_cache import open_store; open_store("mywiki").get("Q5")`.
+From Python:
+
+```python
+from wikibase_cache.fetch import Cache, Rules
+with Cache.open("wikidata", confirm=lambda message: True) as cache:
+    items = cache.basic_fetch(["Q42", "Q1"])        # {id: entity}
+    douglas = cache.full_fetch(["Q42"])["Q42"]
+    rows = cache.sparql("SELECT ?x WHERE { ?x wdt:P31 wd:Q5 } LIMIT 3")
+```
+
+**Fetch modes** (from [speaker-mining](https://github.com/borgnetzwerk/speaker-mining), see the [glossary](docs/glossary.md)):
+
+- `basic_fetch` keeps labels, descriptions and aliases in the target's languages and, of the claims, only *instance of* (P31) and *subclass of* (P279). It is answered by any stored version of the entity.
+- `full_fetch` keeps the whole entity document as the server sent it, including all claims, sitelinks and the revision ID. It is answered only by a stored full version.
+- Both are batched, 50 entities per request, and fetch nothing that is already stored unless `--refresh` is given.
+- `fetch_decision` decides which entities a fully fetched entity points to are fetched next: a rules file maps properties to `basic`, `full` or `skip` (`follow: {P31: basic, P50: full}`, `default: skip`). `expand` applies it level by level from the seeds.
+- `sparql` stores each answer with the query; the same query on the same endpoint is answered from the store.
+
+**Budget and confirmation.** Every run has a request budget (`run_max_requests`, default 200, or `--max-requests`). A run that needs more requests than `confirm_requests` (default 100) asks first; `--yes` skips the question. `--offline` answers from the store only and reports what is missing.
+
+**Large wikis are never listed in full.** On Wikidata, use `fetch`, `expand` and `sparql`. The server's `maxlag` is respected: when Wikidata's replication lags, runs wait with growing pauses and give up cleanly after a few attempts; try again later.
 
 **How `sync` works.** It is meant for small wikis and only allowed for targets added with `--full-sync`. It first lists every entity with its current revision ID (one request per page of up to 500 entities), then fetches, in batches of 50, only the entities that are missing from the store or whose revision has changed. A second run on an unchanged wiki therefore makes only the listing requests. If the listing exceeds `full_sync_max_entities` (default 50,000), the run stops before fetching anything. Each run ends cleanly after its time or request budget (`run_max_seconds`, `run_max_requests`, or `--max-seconds`, `--max-requests`), on Ctrl+C, or when a non-empty file named `STOP` exists in the target's data folder; running the same command again continues where it stopped.
 
@@ -82,7 +106,8 @@ Terms: [docs/glossary.md](docs/glossary.md). Background and the tools we compare
 Fetched data is kept below the data root you chose in the setup, outside this repository, so the repository does not change when you fetch. Each target has its own folder there:
 
 - `events/<date>_<machine>_<number>.jsonl`: the event log, one file per run, one event per line. While a run is in progress, its file carries the suffix `.partial`; when the run ends it is renamed and never changed again. Events: `run_started`, `entity_revision` (the entity document exactly as the server sent it, with its revision ID), `entity_missing`, `entity_unlisted` (no longer listed on the server; the last revision stays readable), `run_finished`. Every event has a UTC time and the ID of its run.
-- `index/<machine>.json`: this machine's index: for each entity, its latest revision and where that event is. Derived from the event log; `rebuild-index` recreates it.
+- `imports/<name>/`: an archive of another tool, read in place and never changed, so the data exists only once. `source.yaml` names its format and files (`format: speaker-mining-v3`, `files: ["chunks/*.jsonl"]`, plus description and origin). Imported versions count like fetched ones (`import-full` answers `full_fetch`, `import-basic` answers `basic_fetch`) but may lack a revision ID; the archived languages and parts are those of the original tool. Indexing a large import takes a minute once per machine.
+- `index/<machine>.json`: this machine's index: for each entity, all stored versions with their place in the files, the latest one and the latest full one; and the stored SPARQL answers. Derived from the event log and the imports; `rebuild-index` recreates it.
 
 **Several machines can share one data root** through a sync service such as Nextcloud or Syncthing. No file is ever written by two machines: event files carry the machine ID that the setup generated, each machine keeps its own index, and a file is complete before it gets its final name (other machines ignore `.partial` files). When a machine opens the store, it reads the event files of other machines that it does not know yet, so an entity one machine has fetched is not fetched again by another once the sync service has delivered the file. If two machines fetch the same revision before that, both events are kept and the revision counts once.
 

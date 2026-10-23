@@ -201,6 +201,42 @@ class Api:
         listed = {page["title"].split(":", 1)[-1]: page["lastrevid"] for page in pages if "lastrevid" in page}
         return listed, data.get("continue")
 
-    def entities(self, ids: list[str]) -> dict[str, dict]:
-        """Entity documents for up to batch_size IDs (wbgetentities)."""
-        return self.get({"action": "wbgetentities", "ids": "|".join(ids)})["entities"]
+    def entities(self, ids: list[str], props: list[str] | None = None,
+                 languages: list[str] | None = None) -> dict[str, dict]:
+        """Entity documents for up to batch_size IDs (wbgetentities); all parts unless props are given."""
+        params = {"action": "wbgetentities", "ids": "|".join(ids)}
+        if props:
+            params["props"] = "|".join(props)
+        if languages:
+            params["languages"] = "|".join(languages)
+            params["languagefallback"] = 0
+        return self.get(params)["entities"]
+
+    def sparql(self, query: str) -> dict:
+        """SPARQL SELECT/ASK result as JSON from the target's query service (GET, so the service may cache it)."""
+        endpoint = self.target.sparql
+        if not endpoint:
+            raise ConfigError(f"Target {self.target.name} has no SPARQL endpoint (add-target --sparql).")
+        headers = {"Accept": "application/sparql-results+json"}
+        for attempt in range(self.target.retries + 1):
+            self._pace()
+            self.requests += 1
+            try:
+                response = self.session.get(endpoint, params={"query": query, "format": "json"}, headers=headers,
+                                            timeout=self.target.timeout)
+            except (requests.ConnectionError, requests.Timeout) as error:
+                if attempt < self.target.retries:
+                    self._backoff(attempt, None, f"connection error ({type(error).__name__})")
+                    continue
+                raise ApiError(f"Connection failed: {type(error).__name__}") from None
+            if response.status_code in RETRY_STATUS and attempt < self.target.retries:
+                self._backoff(attempt, response.headers.get("Retry-After"), f"HTTP {response.status_code}")
+                continue
+            if response.status_code != 200:
+                snippet = self.redact(response.content[:300].decode("utf-8", errors="replace"))
+                raise ApiError(f"SPARQL HTTP {response.status_code}: {snippet}")
+            try:
+                return json.loads(response.content)
+            except json.JSONDecodeError:
+                raise ApiError("SPARQL answer is not JSON") from None
+        raise ApiError("Retries exhausted")

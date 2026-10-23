@@ -116,7 +116,7 @@ def sync(api: Api, store: Store, kinds: list[str] | None = None, max_seconds: fl
                     store.append("entity_missing", id=entity_id)
                     result.missing += 1
                     continue
-                store.append("entity_revision", id=entity_id, revision=entity["lastrevid"], entity=entity)
+                store.append("entity_revision", id=entity_id, revision=entity["lastrevid"], scope="full", entity=entity)
                 result.fetched += 1
             store.flush()
             log(f"  fetched {min(start + size, len(todo))} of {len(todo)}")
