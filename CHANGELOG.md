@@ -12,3 +12,17 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 - Glossary of the terms used, including the fetch modes taken over from speaker-mining (`docs/glossary.md`).
 - SPARQL corpus (`queries/`), every query tested with checksum and example output: properties of the instances of a class (podcast episode, podcast show, video recording; with a subclass variant), instance counts (with a ceiling for large classes), superclasses and subclass trees, a sample variant for large classes, classes, medium and form of the items carrying a property, classes of the items linking to a website.
 - Licensing: MIT for code and queries, CC BY 4.0 for documentation, following the REUSE Specification; contribution guide.
+- Required setup (`setup`, `add-target`): operator, data root and targets are asked for, shown and saved to `config.local.yaml` (never committed); the server reports entity namespaces and the account of the credentials. Nothing is fetched or written before the setup.
+- Login per target: none, OAuth 2.0 access token or bot password, secrets only from environment variables.
+- `sync` for small wikis: lists every entity with its revision and fetches only what is missing or changed, in runs that end cleanly on a time or request budget, Ctrl+C or a STOP file; stops before fetching if the wiki exceeds `full_sync_max_entities`. `get`, `status`, `scan`, `rebuild-index` and `targets` work without network access.
+- Local store below the data root: append-only event files, written once and named by machine, plus one derived index per machine, so several machines can share the data root through a sync service.
+- Protection against leaked credentials: only entity documents are stored, never whole responses; an event containing a secret, a `Bearer` or `Authorization` header or `debuginfo` is refused.
+- Offline tests against an in-memory Wikibase that echoes request headers like a misconfigured real instance (`tests/`).
+
+### Changed
+
+- The User-Agent names the tool `wikibase-cache` after its repository; the operator, who is the client making the requests, comes first.
+
+### Removed
+
+- `operator.example.yaml` and `operator.yaml`: the operator is now part of the setup.

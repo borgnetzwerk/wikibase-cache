@@ -14,12 +14,12 @@ Thank you for your interest in wikibase-cache! This tool reads from Wikidata and
 
 ## Running it yourself
 
-Copy `operator.example.yaml` to `operator.yaml` and enter your own name and contact. You are responsible for the requests you make; every request identifies you. Keep within the rules of the services you query (see the links in `operator.example.yaml` and [docs/related_work.md](docs/related_work.md)).
+Run `python -m wikibase_cache setup` and enter your own name and contact (see the README, Setup). You are responsible for the requests you make; every request identifies you. Keep within the rules of the services you query (see the README and [docs/related_work.md](docs/related_work.md)).
 
 ## Submitting a change
 
 1. Create a branch for your change.
-2. Never commit `operator.yaml`, tokens or fetched data.
+2. Never commit `config.local.yaml`, tokens, passwords or fetched data.
 3. Open a pull request that explains what you changed and why.
 
 ## License

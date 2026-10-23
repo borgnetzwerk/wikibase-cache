@@ -219,5 +219,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Local operator identification (see operator.example.yaml), never committed
+# Machine-local settings written by setup (see config.example.yaml), never committed;
+# operator.yaml is the local file of versions before the setup existed
 operator.yaml
+config.local.yaml
+*.local.*
