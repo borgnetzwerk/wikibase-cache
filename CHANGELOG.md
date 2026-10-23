@@ -22,6 +22,8 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 ### Changed
 
 - The User-Agent names the tool `wikibase-cache` after its repository; the operator, who is the client making the requests, comes first.
+- Backoff waits the longer of the server's `Retry-After` and a growing pause, so a lagging Wikidata is not given up on after a few seconds; `add-target` asks without `maxlag`, as a person waits for it.
+- PHP notices in front of a JSON answer are detected and cut off for every target, with a warning; no setting needed.
 
 ### Removed
 

@@ -72,6 +72,8 @@ class Api:
         elif auth.method != "none":
             raise ConfigError(f"Unknown auth method {auth.method!r}")
         self._logged_in = auth.method != "botpassword"
+        # maxlag is for unattended runs (API:Etiquette); single requests a person waits for (add-target) go without
+        self.use_maxlag = True
 
     # ── Transport ──────────────────────────────────────────────────────────────
 
@@ -80,7 +82,9 @@ class Api:
         return self._call("GET", params)
 
     def _call(self, method: str, params: dict) -> dict:
-        params = {**params, "format": "json", "formatversion": 2, "maxlag": self.target.maxlag}
+        params = {**params, "format": "json", "formatversion": 2}
+        if self.use_maxlag:
+            params["maxlag"] = self.target.maxlag
         for attempt in range(self.target.retries + 1):
             self._pace()
             self.requests += 1
@@ -130,7 +134,10 @@ class Api:
         self._last_request = time.monotonic()
 
     def _backoff(self, attempt: int, retry_after: str | None, why: str) -> None:
-        delay = int(retry_after) if retry_after and retry_after.isdigit() else self.target.backoff_base * 2 ** attempt
+        # The longer of what the server asks for and a growing backoff: a lagging server (maxlag) often answers
+        # Retry-After 5 again and again, so waiting only that long would give up after a few seconds
+        backoff = self.target.backoff_base * 2 ** attempt
+        delay = max(int(retry_after), backoff) if retry_after and retry_after.isdigit() else backoff
         self.log(f"  {why}, waiting {delay} s")
         self.sleep(delay)
 

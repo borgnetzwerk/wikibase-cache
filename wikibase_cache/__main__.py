@@ -159,6 +159,7 @@ def add_target(config: Config, args) -> int:
         raise ConfigError("--auth botpassword needs --username-env and --password-env.")
     target = Target(name=args.name, api=args.api, namespaces={}, auth=auth, full_sync=args.full_sync)
     api = Api(target, config.operator)
+    api.use_maxlag = False  # one or two requests while a person waits
     print(f"Asking {args.api} for its entity namespaces ...")
     target.namespaces = api.entity_namespaces()
     if not target.namespaces:
