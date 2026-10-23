@@ -31,7 +31,7 @@ python -m wikibase_cache add-target otherwiki --api https://otherwiki.example.or
 - `oauth2`: an access token of an [OAuth 2.0 owner-only consumer](https://www.mediawiki.org/wiki/OAuth/Owner-only_consumers), read from the named environment variable.
 - `botpassword`: a [bot password](https://www.mediawiki.org/wiki/Manual:Bot_passwords) (`User@BotName` and password), read from the two named environment variables.
 
-Secrets are never stored in a file; the configuration holds only the names of the environment variables. Before each run the tool checks that the credentials still belong to the account recorded at `add-target`.
+The configuration holds only the names of the environment variables, never the secrets. If setting environment variables is inconvenient (Linux, macOS, containers, several wikis), `setup --env-file PATH` names a `.env` file (`NAME=value` lines) to read them from. The file must lie outside this repository, where it could be committed, and outside the data root, which a sync service may share; a variable set in the environment takes precedence over the file. Before each run the tool checks that the credentials still belong to the account recorded at `add-target`.
 
 Everything you set up lands in `config.local.yaml` (never committed); [config.example.yaml](config.example.yaml) shows its form. `python -m wikibase_cache targets` shows the current configuration.
 

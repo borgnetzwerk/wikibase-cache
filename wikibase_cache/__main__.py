@@ -1,7 +1,8 @@
 """Command line.
 
 Setup (required once per clone; nothing is fetched or written before):
-    python -m wikibase_cache setup [--operator-name N] [--operator-contact URL] [--data-root PATH] [--yes]
+    python -m wikibase_cache setup [--operator-name N] [--operator-contact URL] [--data-root PATH]
+        [--env-file PATH | --no-env-file] [--yes]
     python -m wikibase_cache add-target <name> --api URL [--auth none|oauth2|botpassword]
         [--token-env VAR] [--username-env VAR] [--password-env VAR] [--full-sync] [--yes]
         Asks the server for its entity namespaces and, with credentials, for the account they belong to (network).
@@ -74,6 +75,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--operator-name")
     p.add_argument("--operator-contact")
     p.add_argument("--data-root")
+    p.add_argument("--env-file", help="optional .env file with secrets, outside the repository and the data root")
+    p.add_argument("--no-env-file", action="store_true", help="remove a configured .env file")
     p.add_argument("--yes", action="store_true", help="save without asking for confirmation")
     p = sub.add_parser("add-target")
     p.add_argument("name")
@@ -131,11 +134,17 @@ def setup(args) -> int:
           "Example: %LOCALAPPDATA%/wikibase-cache (Windows) or ~/.local/share/wikibase-cache (Linux, macOS).")
     root_text = _ask("Data root", args.data_root, str(existing.data_root) if existing else None)
     data_root = cfg.validate_data_root(root_text)
+    env_file = existing.env_file if existing else None
+    if args.no_env_file:
+        env_file = None
+    elif args.env_file:
+        env_file = cfg.validate_env_file(args.env_file, data_root)
     config = Config(operator, data_root, existing.machine_id if existing else cfg.new_machine_id(),
-                    existing.targets if existing else {})
+                    existing.targets if existing else {}, env_file=env_file)
     exists = "exists" if data_root.exists() else "will be created"
     summary = (f"\nOperator:   {operator.name} ({operator.contact})\nData root:  {data_root} ({exists})\n"
-               f"Machine ID: {config.machine_id}\nTargets:    {', '.join(sorted(config.targets)) or 'none yet'}\n"
+               f"Machine ID: {config.machine_id}\nEnv file:   {env_file or 'none (secrets from environment variables)'}\n"
+               f"Targets:    {', '.join(sorted(config.targets)) or 'none yet'}\n"
                f"File:       {config.path}")
     if not _confirm(summary, args.yes):
         print("Nothing saved.")
@@ -157,6 +166,7 @@ def add_target(config: Config, args) -> int:
         raise ConfigError("--auth oauth2 needs --token-env.")
     if auth.method == "botpassword" and not (auth.username_env and auth.password_env):
         raise ConfigError("--auth botpassword needs --username-env and --password-env.")
+    auth.env_file_values = cfg.read_env_file(config.env_file) if config.env_file else {}
     target = Target(name=args.name, api=args.api, namespaces={}, auth=auth, full_sync=args.full_sync)
     api = Api(target, config.operator)
     api.use_maxlag = False  # one or two requests while a person waits
@@ -188,6 +198,7 @@ def show(config: Config) -> int:
     print(f"Operator:   {config.operator.name} ({config.operator.contact})")
     print(f"Data root:  {config.data_root}")
     print(f"Machine ID: {config.machine_id}")
+    print(f"Env file:   {config.env_file or 'none'}")
     for name, target in sorted(config.targets.items()):
         login = target.auth.method + (f" ({target.auth.account})" if target.auth.account else "")
         print(f"  {name}: {target.api}, namespaces {target.namespaces}, login {login}, "

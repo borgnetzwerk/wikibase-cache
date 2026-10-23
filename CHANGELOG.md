@@ -19,6 +19,8 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 - Protection against leaked credentials: only entity documents are stored, never whole responses; an event containing a secret, a `Bearer` or `Authorization` header or `debuginfo` is refused.
 - Offline tests against an in-memory Wikibase that echoes request headers like a misconfigured real instance (`tests/`).
 
+- Optional `.env` file for secrets, named in the setup; refused inside the repository or the data root; environment variables take precedence.
+
 ### Changed
 
 - The User-Agent names the tool `wikibase-cache` after its repository; the operator, who is the client making the requests, comes first.

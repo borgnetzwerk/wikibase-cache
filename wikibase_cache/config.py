@@ -45,11 +45,13 @@ class Auth:
     username_env: str | None = None   # botpassword: environment variable holding "User@BotName"
     password_env: str | None = None   # botpassword: environment variable holding the bot password
     account: str | None = None        # account the credentials belonged to at add-target; checked before each run
+    env_file_values: dict = field(default_factory=dict, repr=False, compare=False)  # from the .env file, not saved
 
     def secret(self, name: str | None) -> str:
-        value = os.environ.get(name or "", "").strip()
+        """Environment variable first, then the .env file named in the setup (WC8)."""
+        value = os.environ.get(name or "", "").strip() or str(self.env_file_values.get(name or "", "")).strip()
         if not value:
-            raise ConfigError(f"Environment variable {name} is not set.")
+            raise ConfigError(f"{name} is set neither as environment variable nor in the .env file of the setup.")
         return value
 
 
@@ -73,7 +75,7 @@ class Target:
     def to_yaml(self) -> dict:
         data = asdict(self)
         data.pop("name")
-        data["auth"] = {k: v for k, v in data["auth"].items() if v is not None}
+        data["auth"] = {k: v for k, v in data["auth"].items() if v is not None and k != "env_file_values"}
         return {k: v for k, v in data.items() if k in ("api", "namespaces", "auth") or v != DEFAULTS.get(k)}
 
 
@@ -90,6 +92,7 @@ class Config:
     machine_id: str
     targets: dict[str, Target]
     path: Path = LOCAL_CONFIG
+    env_file: Path | None = None
 
     def target(self, name: str) -> Target:
         if name not in self.targets:
@@ -105,6 +108,7 @@ class Config:
             "operator": asdict(self.operator),
             "data_root": str(self.data_root),
             "machine_id": self.machine_id,
+            **({"env_file": str(self.env_file)} if self.env_file else {}),
             "targets": {name: target.to_yaml() for name, target in sorted(self.targets.items())},
         }
         header = ("# wikibase-cache local configuration, written by `setup` and `add-target`. Never committed.\n"
@@ -133,6 +137,36 @@ def validate_data_root(value: str) -> Path:
     return path
 
 
+def validate_env_file(value: str, data_root: Path) -> Path:
+    """A .env file is plain text: only outside this repository and outside the (possibly shared) data root."""
+    path = Path(os.path.expandvars(os.path.expanduser(value.strip())))
+    if not path.is_absolute():
+        raise ConfigError(f"The .env file must be given as an absolute path, got {value!r}.")
+    if not path.is_file():
+        raise ConfigError(f"The .env file {path} does not exist.")
+    resolved = path.resolve()
+    if resolved.is_relative_to(REPO_ROOT):
+        raise ConfigError("The .env file must not lie inside this repository (it could be committed).")
+    if resolved.is_relative_to(data_root.resolve()):
+        raise ConfigError("The .env file must not lie inside the data root (a sync service would spread it).")
+    return path
+
+
+def read_env_file(path: Path) -> dict[str, str]:
+    """NAME=value lines; '#' comments, blank lines and a leading 'export ' are ignored, outer quotes removed."""
+    values = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.removeprefix("export ").split("=", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        values[name.strip()] = value
+    return values
+
+
 def new_machine_id() -> str:
     """Random, stable per clone; names this machine's event files so two machines never write the same file."""
     return secrets.token_hex(3)
@@ -149,11 +183,13 @@ def load(path: Path | None = None) -> Config:
         machine_id = str(raw["machine_id"])
     except (KeyError, TypeError) as error:
         raise NotSetUp(f"{path.name} is incomplete ({error}).") from None
+    env_file = validate_env_file(raw["env_file"], data_root) if raw.get("env_file") else None
+    env_values = read_env_file(env_file) if env_file else {}
     targets = {}
     for name, values in (raw.get("targets") or {}).items():
         values = dict(values)
-        auth = Auth(**(values.pop("auth", None) or {}))
+        auth = Auth(**(values.pop("auth", None) or {}), env_file_values=env_values)
         if auth.method not in AUTH_METHODS:
             raise ConfigError(f"Target {name}: unknown auth method {auth.method!r} ({', '.join(AUTH_METHODS)}).")
         targets[name] = Target(name=name, auth=auth, **values)
-    return Config(operator, data_root, machine_id, targets, path)
+    return Config(operator, data_root, machine_id, targets, path, env_file)
