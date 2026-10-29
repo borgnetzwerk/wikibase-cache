@@ -19,6 +19,8 @@ Use:
         Run a SPARQL query cache-first and print the JSON result.
     python -m wikibase_cache sync <target> [--kinds item,property] [--max-seconds N] [--max-requests N]
         Fetch every entity that is missing from the store or has changed (network; full-sync targets only).
+    python -m wikibase_cache serve <target> [--port 8792] [--offline] [--max-requests N]
+        A local /w/api.php for wbgetentities and wbsearchentities, cache-first (network on a miss); see serve.py.
     python -m wikibase_cache get <target> <ID> [--revision N]      one entity from the store (no network)
     python -m wikibase_cache status <target>                       store contents, last runs (no network)
     python -m wikibase_cache scan <target>                         check stored data for secrets (no network)
@@ -57,6 +59,12 @@ def main(argv: list[str] | None = None) -> int:
             return run_sync(config, target, root, args)
         if args.command in ("fetch", "expand", "sparql"):
             return run_fetch(config, target, args)
+        if args.command == "serve":
+            from .fetch import Cache
+            from .serve import serve
+            with Cache(config, target, offline=args.offline, max_requests=args.max_requests) as cache:
+                serve(cache, args.port)
+            return 0
         store = Store(root, config.machine_id)
         if args.command == "get":
             entity = store.get(args.id, args.revision)
@@ -124,6 +132,11 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--refresh", action="store_true")
     p.add_argument("--offline", action="store_true")
     p.add_argument("--yes", action="store_true")
+    p = sub.add_parser("serve")
+    p.add_argument("target")
+    p.add_argument("--port", type=int, default=8792)
+    p.add_argument("--offline", action="store_true", help="answer from the store only; a miss is an API error")
+    p.add_argument("--max-requests", type=int, help="budget for the whole time the server runs")
     p = sub.add_parser("sync")
     p.add_argument("target")
     p.add_argument("--kinds", help="comma-separated, default: all entity namespaces of the target")

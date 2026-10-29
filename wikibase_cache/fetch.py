@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 
 from . import config as cfg
 from .config import Config, Target
-from .store import FULL_SCOPES, Store, query_hash
+from .store import FULL_SCOPES, Store, params_key, query_hash
 
 BASIC_PROPS = ["labels", "descriptions", "aliases", "claims", "info"]
 BASIC_CLAIMS = ("P31", "P279")
@@ -244,6 +244,29 @@ class Cache:
         raw = json.dumps(response, ensure_ascii=False, sort_keys=True)
         self.store.append("sparql_response", endpoint=endpoint, query=query, query_hash=query_hash(endpoint, query),
                           response=response, sha256=hashlib.sha256(raw.encode()).hexdigest())
+        self.store.flush()
+        return response
+
+    # ── Search ─────────────────────────────────────────────────────────────────
+
+    def search(self, text: str, language: str, limit: int = 7, entity_type: str = "item",
+               refresh: bool = False) -> dict:
+        """wbsearchentities answer for one text, cache-first. The result part of the answer is kept as the server
+        sent it; the entities it names are not fetched (that is entities())."""
+        params = {"action": "wbsearchentities", "search": text, "language": language, "uselang": language,
+                  "type": entity_type, "limit": int(limit)}
+        if not refresh:
+            cached = self.store.api_response(self.target.api, params)
+            if cached is not None:
+                return cached
+        self._approve(1, f"search for {text!r}")
+        self._ensure_run("search")
+        # only the result; some servers echo the request headers in debuginfo, which must never be stored
+        response = {k: v for k, v in self.api.get(params).items() if k in ("search", "searchinfo", "success")}
+        raw = json.dumps(response, ensure_ascii=False, sort_keys=True)
+        self.store.append("api_response", endpoint=self.target.api, params=params,
+                          query_hash=query_hash(self.target.api, params_key(params)), response=response,
+                          sha256=hashlib.sha256(raw.encode()).hexdigest())
         self.store.flush()
         return response
 

@@ -90,4 +90,8 @@ class FakeWiki:
             return answer
         if params.get("action") == "wbgetentities":
             return {"entities": {i: self.entities.get(i, {"id": i, "missing": ""}) for i in params["ids"].split("|")}}
+        if params.get("action") == "wbsearchentities":
+            hits = [{"id": i, "label": e["labels"]["en"]["value"]} for i, e in self.entities.items()
+                    if params["search"] in e["labels"]["en"]["value"]]
+            return {"search": hits[:int(params["limit"])], "success": 1}
         return {"error": {"code": "badrequest", "info": "unknown"}}

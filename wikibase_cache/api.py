@@ -16,7 +16,8 @@ from . import __version__
 from .config import REPOSITORY_URL, REPO_ROOT, ConfigError, Operator, Target
 
 RETRY_STATUS = (429, 502, 503, 504)
-RETRY_API_CODES = ("maxlag", "ratelimited")
+# cirrussearch-too-busy-error: Wikidata's search (wbsearchentities) is overloaded for a moment
+RETRY_API_CODES = ("maxlag", "ratelimited", "cirrussearch-too-busy-error")
 ENTITY_CONTENT_MODELS = {"wikibase-item": "item", "wikibase-property": "property", "wikibase-lexeme": "lexeme"}
 
 

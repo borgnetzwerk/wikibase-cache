@@ -25,6 +25,8 @@ Events (one JSON object per line, each with time (UTC, ISO 8601), type and run):
     entity_missing   {id}                       the server reported the ID as missing
     entity_unlisted  {id}                       the ID no longer appears in the listing (deleted or moved)
     sparql_response  {endpoint, query, query_hash, response, sha256}
+    api_response     {endpoint, params, query_hash, response, sha256}   a read-only API answer that is not an entity
+                                                                        document (wbsearchentities)
     run_finished     {requests, fetched, complete, reason}
 Imported records have scope "import-full" (all claims, labels, descriptions, aliases in the archived languages)
 or "import-basic" (fewer parts), and may lack a revision ID.
@@ -91,6 +93,11 @@ def query_hash(endpoint: str, query: str) -> str:
     return hashlib.sha256(f"{endpoint}\n{text}".encode()).hexdigest()
 
 
+def params_key(params: dict) -> str:
+    """API parameters as one canonical text (sorted, values as strings), so the same question has one key."""
+    return json.dumps({str(k): str(v) for k, v in params.items()}, sort_keys=True, ensure_ascii=False)
+
+
 def newer(a: dict, b: dict | None) -> bool:
     """Is version a newer than version b? By revision where both have one, otherwise by time. For the same
     revision, a full version replaces a reduced one (basic or imported basic)."""
@@ -148,7 +155,7 @@ class Store:
 
     @staticmethod
     def _empty_index() -> dict:
-        return {"version": INDEX_VERSION, "files": [], "entities": {}, "sparql": {}}
+        return {"version": INDEX_VERSION, "files": [], "entities": {}, "sparql": {}, "api": {}}
 
     def catch_up(self) -> int:
         """Add complete event files and imported files that the index does not know yet (from earlier runs, other
@@ -208,6 +215,10 @@ class Store:
                 entry["status"] = kind.removeprefix("entity_")
         elif kind == "sparql_response":
             index["sparql"][event["query_hash"]] = {"file": file_name, "offset": offset, "time": event.get("time")}
+        elif kind == "api_response":
+            # setdefault: indexes written before api_response existed have no "api" key
+            index.setdefault("api", {})[event["query_hash"]] = {"file": file_name, "offset": offset,
+                                                                "time": event.get("time")}
 
     def save_index(self) -> None:
         self.index_path.parent.mkdir(parents=True, exist_ok=True)
@@ -269,6 +280,12 @@ class Store:
 
     def sparql(self, endpoint: str, query: str) -> dict | None:
         ref = self.index["sparql"].get(query_hash(endpoint, query))
+        if not ref:
+            return None
+        return read_event_at(self._path(ref["file"]), ref["offset"])["response"]
+
+    def api_response(self, endpoint: str, params: dict) -> dict | None:
+        ref = self.index.get("api", {}).get(query_hash(endpoint, params_key(params)))
         if not ref:
             return None
         return read_event_at(self._path(ref["file"]), ref["offset"])["response"]

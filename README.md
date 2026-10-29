@@ -2,7 +2,7 @@
 
 An interface to Wikidata and other Wikibase instances that does not burden their servers: it answers from a long-lived local store first and fetches only what is missing, so results can be reused for years and by many projects.
 
-**Status:** early. Implemented: setup, cache-first `basic_fetch`, `full_fetch`, `fetch_decision`/`expand` and SPARQL for any Wikibase including Wikidata, a complete sync for small wikis, and archives of other tools read in place (speaker-mining). Not yet: incoming links, class hierarchies and the other analyses speaker-mining builds on top of its fetches; a local endpoint that answers like `api.php`.
+**Status:** early. Implemented: setup, cache-first `basic_fetch`, `full_fetch`, `fetch_decision`/`expand` and SPARQL for any Wikibase including Wikidata, a complete sync for small wikis, and archives of other tools read in place (speaker-mining), cache-first search, and a local endpoint that answers like `api.php` for entities and search (`serve`). Not yet: incoming links, class hierarchies and the other analyses speaker-mining builds on top of its fetches.
 
 ## Setup (required)
 
@@ -49,6 +49,7 @@ python -m wikibase_cache fetch <target> Q5 --full # full_fetch, cache-first
 python -m wikibase_cache expand <target> Q5 --rules rules.yaml --depth 2
 python -m wikibase_cache sparql <target> query.rq # SPARQL, cache-first, prints the JSON result
 python -m wikibase_cache sync <target>            # small wikis: fetch every entity that is missing or changed
+python -m wikibase_cache serve <target>           # local /w/api.php on 127.0.0.1:8792 for tools that speak the API
 python -m wikibase_cache get <target> Q5          # one entity from the store, as JSON (no network)
 python -m wikibase_cache status <target>          # what the store holds, last runs
 python -m wikibase_cache scan <target>            # check the stored data for secrets and echoed headers
@@ -72,6 +73,8 @@ with Cache.open("wikidata", confirm=lambda message: True) as cache:
 - Both are batched, 50 entities per request, and fetch nothing that is already stored unless `--refresh` is given.
 - `fetch_decision` decides which entities a fully fetched entity points to are fetched next: a rules file maps properties to `basic`, `full` or `skip` (`follow: {P31: basic, P50: full}`, `default: skip`). `expand` applies it level by level from the seeds.
 - `sparql` stores each answer with the query; the same query on the same endpoint is answered from the store.
+- `search` (wbsearchentities) stores the result of each search with its parameters; the same search is answered from the store.
+- `serve` answers `wbgetentities` (as `full_fetch`) and `wbsearchentities` (as `search`) like the target's `api.php`, so an existing tool only needs its API URL changed. It listens on 127.0.0.1 only, handles one request at a time with the same pacing, budget (`--max-requests`) and User-Agent as any other run, and refuses all other actions. `--offline` never asks the target; `GET /shutdown` ends it and closes the run.
 
 **Budget and confirmation.** Every run has a request budget (`run_max_requests`, default 200, or `--max-requests`). A run that needs more requests than `confirm_requests` (default 100) asks first; `--yes` skips the question. `--offline` answers from the store only and reports what is missing.
 
