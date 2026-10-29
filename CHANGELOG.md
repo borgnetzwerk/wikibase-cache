@@ -21,6 +21,7 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 - Cache-first fetch modes for any target, Wikidata included: `basic_fetch` (labels, descriptions, aliases, P31, P279), `full_fetch` (the whole entity with revision), `fetch_decision` with rules from the calling project and `expand` over several levels; SPARQL answers stored per query. Every run has a request budget and asks before more than `confirm_requests` requests; `--offline` answers from the store only.
 - Imports: archives of other tools read in place without copying (`imports/<name>/source.yaml`), first format speaker-mining event store v3.
+- `reset` for a Wikibase that was set up anew: the whole store of the target goes into a checked ZIP archive below `_archives/`, the old folder moves next to it and full-sync targets are synced afresh; nothing is deleted. Three questions in a terminal (confirm, a random sum, the target name), with no option to skip them.
 - Optional `.env` file for secrets, named in the setup; refused inside the repository or the data root; environment variables take precedence.
 
 ### Changed

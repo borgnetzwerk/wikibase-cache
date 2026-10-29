@@ -21,6 +21,9 @@ Use:
         Fetch every entity that is missing from the store or has changed (network; full-sync targets only).
     python -m wikibase_cache serve <target> [--port 8792] [--offline] [--max-requests N]
         A local /w/api.php for wbgetentities and wbsearchentities, cache-first (network on a miss); see serve.py.
+    python -m wikibase_cache reset <target>
+        After the Wikibase was set up anew: archive the whole store as a checked ZIP, move the old folder next to it
+        (nothing is deleted) and sync afresh (full-sync targets). Asks three questions, only in a terminal; see reset.py.
     python -m wikibase_cache get <target> <ID> [--revision N]      one entity from the store (no network)
     python -m wikibase_cache status <target>                       store contents, last runs (no network)
     python -m wikibase_cache scan <target>                         check stored data for secrets (no network)
@@ -57,6 +60,8 @@ def main(argv: list[str] | None = None) -> int:
         root = config.target_dir(target.name)
         if args.command == "sync":
             return run_sync(config, target, root, args)
+        if args.command == "reset":
+            return run_reset(config, target, root)
         if args.command in ("fetch", "expand", "sparql"):
             return run_fetch(config, target, args)
         if args.command == "serve":
@@ -142,6 +147,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--kinds", help="comma-separated, default: all entity namespaces of the target")
     p.add_argument("--max-seconds", type=float)
     p.add_argument("--max-requests", type=int)
+    sub.add_parser("reset").add_argument("target")   # no options on purpose: the questions cannot be skipped
     p = sub.add_parser("get")
     p.add_argument("target")
     p.add_argument("id")
@@ -278,6 +284,30 @@ def run_sync(config: Config, target: Target, root: Path, args) -> int:
     print(f"{result.listed} listed, {result.fetched} fetched, {result.missing} missing, {result.unlisted} no longer "
           f"listed, {result.requests} requests: {state}")
     return 0 if result.complete else 4
+
+
+def run_reset(config: Config, target: Target, root: Path, ask=input, interactive=None) -> int:
+    from . import reset
+
+    p = reset.plan(config.data_root, target.name)
+    if not p.files:
+        print(f"The store of {target.name} is empty ({root}); nothing to archive.")
+        return 0
+    try:
+        reset.confirm(p, ask=ask, interactive=interactive)
+    except (reset.NotInteractive, reset.NotConfirmed) as error:
+        print(f"Not reset: {error}. Nothing was changed.", file=sys.stderr)
+        return 1
+    try:
+        reset.archive(p)
+    except (reset.ArchiveMismatch, OSError) as error:
+        print(f"ABORTED: {error}", file=sys.stderr)
+        return 3
+    if not target.full_sync:
+        print(f"The store of {target.name} starts empty; fetch fills it again as needed.")
+        return 0
+    print(f"Fetching {target.name} afresh; if this stops, run `python -m wikibase_cache sync {target.name}` again.")
+    return run_sync(config, target, root, argparse.Namespace(kinds=None, max_seconds=None, max_requests=None))
 
 
 def run_fetch(config: Config, target: Target, args) -> int:

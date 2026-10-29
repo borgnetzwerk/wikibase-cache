@@ -53,6 +53,7 @@ python -m wikibase_cache serve <target>           # local /w/api.php on 127.0.0.
 python -m wikibase_cache get <target> Q5          # one entity from the store, as JSON (no network)
 python -m wikibase_cache status <target>          # what the store holds, last runs
 python -m wikibase_cache scan <target>            # check the stored data for secrets and echoed headers
+python -m wikibase_cache reset <target>           # after the Wikibase was set up anew: archive the store, start afresh
 python -m pytest tests                            # offline tests
 ```
 
@@ -82,6 +83,8 @@ with Cache.open("wikidata", confirm=lambda message: True) as cache:
 
 **How `sync` works.** It is meant for small wikis and only allowed for targets added with `--full-sync`. It first lists every entity with its current revision ID (one request per page of up to 500 entities), then fetches, in batches of 50, only the entities that are missing from the store or whose revision has changed. A second run on an unchanged wiki therefore makes only the listing requests. If the listing exceeds `full_sync_max_entities` (default 50,000), the run stops before fetching anything. Each run ends cleanly after its time or request budget (`run_max_seconds`, `run_max_requests`, or `--max-seconds`, `--max-requests`), on Ctrl+C, or when a non-empty file named `STOP` exists in the target's data folder; running the same command again continues where it stopped.
 
+**When the Wikibase was set up anew.** After a reset of the server, the same Q and P numbers name other entities, so the old store must not be mixed with new versions. `reset <target>` packs the whole folder of the target into `_archives/<target>/<target>_<date>_<time>.zip` below the data root, checks every file in the archive against the original (size and CRC), writes a manifest next to it and moves the old folder next to the archive; full-sync targets are then synced afresh. The tool never deletes anything: the old folder stays until a person removes it after looking at the archive. Because the step is rare and consequential, `reset` asks three questions (confirm, a random sum, the target name), only in a terminal, and has no option to skip them.
+
 **Secrets never reach the disk.** Some instances repeat the request headers, including credentials, in the `debuginfo` part of every response. The tool stores entity documents only, never whole responses, and refuses to write any event that contains a secret, `Bearer `, `Authorization:` or `debuginfo`. `scan` checks the stored files for the same markers afterwards.
 
 ## What it is meant to do
@@ -110,6 +113,7 @@ Fetched data is kept below the data root you chose in the setup, outside this re
 
 - `events/<date>_<machine>_<number>.jsonl`: the event log, one file per run, one event per line. While a run is in progress, its file carries the suffix `.partial`; when the run ends it is renamed and never changed again. Events: `run_started`, `entity_revision` (the entity document exactly as the server sent it, with its revision ID), `entity_missing`, `entity_unlisted` (no longer listed on the server; the last revision stays readable), `run_finished`. Every event has a UTC time and the ID of its run.
 - `imports/<name>/`: an archive of another tool, read in place and never changed, so the data exists only once. `source.yaml` names its format and files (`format: speaker-mining-v3`, `files: ["chunks/*.jsonl"]`, plus description and origin). Imported versions count like fetched ones (`import-full` answers `full_fetch`, `import-basic` answers `basic_fetch`) but may lack a revision ID; the archived languages and parts are those of the original tool. Indexing a large import takes a minute once per machine.
+- `_archives/<target>/` (next to the target folders, below the data root): archives and old folders left by `reset`, each with a manifest (`.json`: files, bytes, SHA-256 of the archive).
 - `index/<machine>.json`: this machine's index: for each entity, all stored versions with their place in the files, the latest one and the latest full one; and the stored SPARQL answers. Derived from the event log and the imports; `rebuild-index` recreates it.
 
 **Several machines can share one data root** through a sync service such as Nextcloud or Syncthing. No file is ever written by two machines: event files carry the machine ID that the setup generated, each machine keeps its own index, and a file is complete before it gets its final name (other machines ignore `.partial` files). When a machine opens the store, it reads the event files of other machines that it does not know yet, so an entity one machine has fetched is not fetched again by another once the sync service has delivered the file. If two machines fetch the same revision before that, both events are kept and the revision counts once.
