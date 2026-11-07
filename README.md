@@ -49,6 +49,8 @@ python -m wikibase_cache fetch <target> Q5 --full # full_fetch, cache-first
 python -m wikibase_cache expand <target> Q5 --rules rules.yaml --depth 2
 python -m wikibase_cache sparql <target> query.rq # SPARQL, cache-first, prints the JSON result
 python -m wikibase_cache sync <target>            # small wikis: fetch every entity that is missing or changed
+python -m wikibase_cache sync-pages <target> ""   # the same for wiki pages of a namespace ("" = main), with their text
+python -m wikibase_cache page <target> "Title"    # one stored wiki page, its text (no network)
 python -m wikibase_cache serve <target>           # local /w/api.php on 127.0.0.1:8792 for tools that speak the API
 python -m wikibase_cache get <target> Q5          # one entity from the store, as JSON (no network)
 python -m wikibase_cache status <target>          # what the store holds, last runs

@@ -24,6 +24,7 @@ class FakeWiki:
         self.bot_login = bot_login  # (lgname, lgpassword) the wiki accepts
         self.session_cookie: str | None = None
         self.entities: dict[str, dict] = {}
+        self.pages: dict[str, dict] = {}   # text pages of the main namespace: title -> {revision, text}
         self.calls: list[dict] = []
         self.fail_next: list[int] = []  # status codes to return before answering normally
         self.headers: dict = {}
@@ -77,6 +78,17 @@ class FakeWiki:
             return {"query": {"userinfo": {"id": 1, "name": self.user}}}
         if params.get("meta") == "siteinfo":
             return {"query": {"namespaces": {str(n["id"]): n for n in self.NAMESPACES}}}
+        if params.get("generator") == "allpages" and params["gapnamespace"] == 0:
+            return {"query": {"pages": [{"title": t, "ns": 0, "lastrevid": p["revision"]} for t, p in self.pages.items()]}}
+        if params.get("prop") == "revisions":
+            out = []
+            for title in params["titles"].split("|"):
+                p = self.pages.get(title)
+                out.append({"title": title, "missing": True} if p is None else
+                           {"title": title, "pageid": 1, "ns": 0, "revisions": [
+                               {"revid": p["revision"], "timestamp": "2026-11-04T11:47:35Z",
+                                "slots": {"main": {"contentmodel": "wikitext", "content": p["text"]}}}]})
+            return {"query": {"pages": out}}
         if params.get("generator") == "allpages":
             letter = {120: "Q", 122: "P"}[params["gapnamespace"]]
             prefix = {120: "Item", 122: "Property"}[params["gapnamespace"]]

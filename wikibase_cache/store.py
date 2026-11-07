@@ -27,6 +27,10 @@ Events (one JSON object per line, each with time (UTC, ISO 8601), type and run):
     sparql_response  {endpoint, query, query_hash, response, sha256}
     api_response     {endpoint, params, query_hash, response, sha256}   a read-only API answer that is not an entity
                                                                         document (wbsearchentities)
+    page_revision    {title, pageid, ns, revision, timestamp, contentmodel, text}   a wiki page that is not an entity
+                                                                                   (e.g. a transcript), current text
+    page_missing     {title}                    the server reported the page as missing
+    page_unlisted    {title}                    the page no longer appears in the listing of its namespace
     run_finished     {requests, fetched, complete, reason}
 Imported records have scope "import-full" (all claims, labels, descriptions, aliases in the archived languages)
 or "import-basic" (fewer parts), and may lack a revision ID.
@@ -155,7 +159,7 @@ class Store:
 
     @staticmethod
     def _empty_index() -> dict:
-        return {"version": INDEX_VERSION, "files": [], "entities": {}, "sparql": {}, "api": {}}
+        return {"version": INDEX_VERSION, "files": [], "entities": {}, "sparql": {}, "api": {}, "pages": {}}
 
     def catch_up(self) -> int:
         """Add complete event files and imported files that the index does not know yet (from earlier runs, other
@@ -215,6 +219,18 @@ class Store:
                 entry["status"] = kind.removeprefix("entity_")
         elif kind == "sparql_response":
             index["sparql"][event["query_hash"]] = {"file": file_name, "offset": offset, "time": event.get("time")}
+        elif kind == "page_revision":
+            # setdefault: indexes written before page_revision existed have no "pages" key
+            entry = index.setdefault("pages", {}).setdefault(event["title"], {})
+            version = {"file": file_name, "offset": offset, "revision": event.get("revision"),
+                       "time": event.get("time", ""), "ns": event.get("ns")}
+            if newer(version, entry.get("latest")):
+                entry["latest"] = version
+                entry.pop("status", None)
+        elif kind in ("page_missing", "page_unlisted"):
+            entry = index.setdefault("pages", {}).get(event["title"])
+            if entry is not None:
+                entry["status"] = kind.removeprefix("page_")
         elif kind == "api_response":
             # setdefault: indexes written before api_response existed have no "api" key
             index.setdefault("api", {})[event["query_hash"]] = {"file": file_name, "offset": offset,
@@ -277,6 +293,26 @@ class Store:
         ordered = sorted(entry["versions"], key=lambda v: (v["time"], v["revision"] or 0))
         return [{"revision": v["revision"], "time": v["time"], "scope": v["scope"], "file": v["file"]}
                 for v in ordered]
+
+    def page_revisions(self, namespace: int | None = None) -> dict[str, int]:
+        """Page title -> latest stored revision, for pages still listed on the server (used by sync_pages)."""
+        return {title: entry["latest"]["revision"] for title, entry in self.index.get("pages", {}).items()
+                if "status" not in entry and entry.get("latest")
+                and (namespace is None or entry["latest"].get("ns") == namespace)}
+
+    def page(self, title: str) -> dict | None:
+        """The stored current version of a wiki page (the page_revision event without time, type and run), or None.
+        Spaces and underscores in the title are the same, as in MediaWiki."""
+        pages = self.index.get("pages", {})
+        entry = pages.get(title) or pages.get(title.replace("_", " "))
+        if not entry or not entry.get("latest"):
+            return None
+        event = read_event_at(self._path(entry["latest"]["file"]), entry["latest"]["offset"])
+        return {k: v for k, v in event.items() if k not in ("time", "type", "run")}
+
+    def pages(self) -> list[str]:
+        """Titles of all stored pages still listed on the server."""
+        return sorted(t for t, e in self.index.get("pages", {}).items() if "status" not in e and e.get("latest"))
 
     def sparql(self, endpoint: str, query: str) -> dict | None:
         ref = self.index["sparql"].get(query_hash(endpoint, query))

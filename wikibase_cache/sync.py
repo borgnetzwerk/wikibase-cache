@@ -132,5 +132,73 @@ def sync(api: Api, store: Store, kinds: list[str] | None = None, max_seconds: fl
                 signal.signal(sig, handler)
 
 
+PAGE_BATCH = 50   # titles per request with text (API:Revisions, multiple-page mode)
+
+
+def sync_pages(api: Api, store: Store, namespaces: list[str], max_seconds: float | None = None,
+               max_requests: int | None = None, install_signals: bool = True, log=print) -> SyncResult:
+    """Like sync, for text namespaces (e.g. Transcript, or '' for the main namespace): list every page with its
+    current revision, then fetch the text of what is missing from the store or has changed."""
+    target = api.target
+    if not target.full_sync:
+        raise ValueError(f"Target {target.name} is not set up for a full sync (add-target --full-sync).")
+    stopper = Stopper(store, api, max_seconds or target.run_max_seconds, max_requests or target.run_max_requests)
+    if install_signals:
+        previous = {sig: signal.signal(sig, stopper.handle_signal) for sig in (signal.SIGINT, signal.SIGTERM)}
+    result = SyncResult()
+    store.open_run(uuid.uuid4().hex[:12])
+    store.append("run_started", mode="sync_pages", namespaces=namespaces)
+    try:
+        check_account(api)
+        ids = api.namespace_ids()
+        unknown = [n for n in namespaces if n not in ids]
+        if unknown:
+            raise ValueError(f"Unknown namespace(s) on {target.name}: {unknown}; known: {sorted(k for k in ids if k)}")
+        for name in namespaces:
+            number = ids[name]
+            known = store.page_revisions(number)
+            listed: dict[str, int] = {}
+            cont = None
+            while True:
+                reason = stopper.reason()
+                if reason:
+                    result.reason = reason
+                    return result
+                page, cont = api.list_pages(number, cont)
+                listed.update(page)
+                if not cont:
+                    break
+            result.listed += len(listed)
+            for title in sorted(set(known) - set(listed)):
+                store.append("page_unlisted", title=title)
+                result.unlisted += 1
+            todo = sorted(t for t, rev in listed.items() if known.get(t) != rev)
+            result.to_fetch += len(todo)
+            log(f"Namespace {name or '(main)'} ({number}): {len(listed)} pages, {len(todo)} missing or changed")
+            for start in range(0, len(todo), PAGE_BATCH):
+                reason = stopper.reason()
+                if reason:
+                    result.reason = reason
+                    return result
+                for page in api.page_texts(todo[start:start + PAGE_BATCH]):
+                    if page.get("missing"):
+                        store.append("page_missing", title=page["title"])
+                        result.missing += 1
+                        continue
+                    store.append("page_revision", **page)
+                    result.fetched += 1
+                store.flush()
+        result.complete = True
+        return result
+    finally:
+        result.requests = api.requests
+        store.append("run_finished", requests=result.requests, fetched=result.fetched,
+                     complete=result.complete, reason=result.reason)
+        store.close_run()
+        if install_signals:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
+
+
 def _sort_key(entity_id: str):
     return (entity_id[0], int(entity_id[1:])) if entity_id[1:].isdigit() else (entity_id, 0)

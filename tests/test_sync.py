@@ -19,7 +19,7 @@ from wikibase_cache.api import Api, ApiError  # noqa: E402
 from wikibase_cache.config import Auth, ConfigError, NotSetUp, Operator, Target  # noqa: E402
 from wikibase_cache.scan import scan  # noqa: E402
 from wikibase_cache.store import LeakError, Store  # noqa: E402
-from wikibase_cache.sync import sync  # noqa: E402
+from wikibase_cache.sync import sync, sync_pages  # noqa: E402
 
 TOKEN = "test-token-abc123"
 PASSWORD = "bot-password-xyz789"
@@ -305,3 +305,28 @@ def test_example_operator_is_refused():
 def test_missing_config_is_not_set_up(tmp_path):
     with pytest.raises(NotSetUp):
         cfg.load(tmp_path / "config.local.yaml")
+
+
+# ── Text pages ────────────────────────────────────────────────────────────────
+
+def run_pages(target, wiki, root, namespaces):
+    api = make_api(target, wiki)
+    return sync_pages(api, Store(root, "m1", secrets=api.secrets), namespaces, install_signals=False, log=lambda *a: None)
+
+
+def test_sync_pages_stores_text_and_fetches_only_changes(target, wiki, tmp_path):
+    wiki.pages["Transcript:Episode 1"] = {"revision": 7, "text": "Welcome to the podcast."}
+    first = run_pages(target, wiki, tmp_path, [""])
+    assert (first.listed, first.fetched, first.complete) == (1, 1, True)
+    page = Store(tmp_path, "m1").page("Transcript:Episode_1")   # underscores as in a URL
+    assert page["text"] == "Welcome to the podcast." and page["revision"] == 7
+    second = run_pages(target, wiki, tmp_path, [""])
+    assert second.fetched == 0
+    wiki.pages["Transcript:Episode 1"] = {"revision": 8, "text": "Welcome, corrected."}
+    third = run_pages(target, wiki, tmp_path, [""])
+    assert third.fetched == 1 and Store(tmp_path, "m1").page("Transcript:Episode 1")["text"] == "Welcome, corrected."
+
+
+def test_sync_pages_rejects_unknown_namespace(target, wiki, tmp_path):
+    with pytest.raises(ValueError, match="Unknown namespace"):
+        run_pages(target, wiki, tmp_path, ["Transcript"])

@@ -202,6 +202,50 @@ class Api:
         listed = {page["title"].split(":", 1)[-1]: page["lastrevid"] for page in pages if "lastrevid" in page}
         return listed, data.get("continue")
 
+    def namespace_ids(self) -> dict[str, int]:
+        """Namespace name (local and canonical, as the wiki spells them; '' for the main namespace) -> number."""
+        data = self.get({"action": "query", "meta": "siteinfo", "siprop": "namespaces"})
+        namespaces = data["query"]["namespaces"]
+        if isinstance(namespaces, dict):
+            namespaces = list(namespaces.values())
+        found = {}
+        for namespace in namespaces:
+            for key in ("name", "canonical"):
+                if key in namespace:
+                    found[namespace[key]] = namespace["id"]
+        return found
+
+    def list_pages(self, namespace: int, cont: dict | None = None) -> tuple[dict[str, int], dict | None]:
+        """One page of the listing of a text namespace: full page title -> current revision ID, and the
+        continuation (None at the end)."""
+        params = {"action": "query", "generator": "allpages", "gapnamespace": namespace, "gaplimit": "max",
+                  "prop": "info", **(cont or {})}
+        data = self.get(params)
+        pages = (data.get("query") or {}).get("pages") or []
+        if isinstance(pages, dict):
+            pages = list(pages.values())
+        return {page["title"]: page["lastrevid"] for page in pages if "lastrevid" in page}, data.get("continue")
+
+    def page_texts(self, titles: list[str]) -> list[dict]:
+        """Current revision of up to 50 pages with their text (main slot). Only the fields kept in the store leave
+        this method: title, pageid, ns, revision, timestamp, contentmodel, text; a missing page has missing=True."""
+        data = self.get({"action": "query", "titles": "|".join(titles), "prop": "revisions",
+                         "rvprop": "ids|timestamp|content|contentmodel", "rvslots": "main"})
+        pages = (data.get("query") or {}).get("pages") or []
+        if isinstance(pages, dict):
+            pages = list(pages.values())
+        out = []
+        for page in pages:
+            if page.get("missing") or page.get("invalid") or not page.get("revisions"):
+                out.append({"title": page.get("title", ""), "missing": True})
+                continue
+            revision = page["revisions"][0]
+            slot = (revision.get("slots") or {}).get("main") or {}
+            out.append({"title": page["title"], "pageid": page.get("pageid"), "ns": page.get("ns"),
+                        "revision": revision["revid"], "timestamp": revision.get("timestamp", ""),
+                        "contentmodel": slot.get("contentmodel", ""), "text": slot.get("content", "")})
+        return out
+
     def entities(self, ids: list[str], props: list[str] | None = None,
                  languages: list[str] | None = None) -> dict[str, dict]:
         """Entity documents for up to batch_size IDs (wbgetentities); all parts unless props are given."""

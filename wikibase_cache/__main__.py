@@ -19,6 +19,10 @@ Use:
         Run a SPARQL query cache-first and print the JSON result.
     python -m wikibase_cache sync <target> [--kinds item,property] [--max-seconds N] [--max-requests N]
         Fetch every entity that is missing from the store or has changed (network; full-sync targets only).
+    python -m wikibase_cache sync-pages <target> <NAMESPACE>... [--max-seconds N] [--max-requests N]
+        The same for wiki pages that are not entities (e.g. Transcript; "" for the main namespace): list each page
+        with its revision, fetch the text of what is missing or changed (network; full-sync targets only).
+    python -m wikibase_cache page <target> <TITLE> [--json]        one wiki page from the store, its text (no network)
     python -m wikibase_cache serve <target> [--port 8792] [--offline] [--max-requests N]
         A local /w/api.php for wbgetentities and wbsearchentities, cache-first (network on a miss); see serve.py.
     python -m wikibase_cache reset <target>
@@ -58,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
             return show(config)
         target = config.target(args.target)
         root = config.target_dir(target.name)
-        if args.command == "sync":
+        if args.command in ("sync", "sync-pages"):
             return run_sync(config, target, root, args)
         if args.command == "reset":
             return run_reset(config, target, root)
@@ -77,6 +81,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"{args.id} is not in the store of {target.name}.", file=sys.stderr)
                 return 1
             print(json.dumps(entity, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "page":
+            page = store.page(args.title)
+            if page is None:
+                print(f"{args.title} is not in the store of {target.name} (sync-pages first).", file=sys.stderr)
+                return 1
+            print(json.dumps(page, ensure_ascii=False, indent=2) if args.json else page["text"])
             return 0
         if args.command == "status":
             return status(store, root)
@@ -147,6 +158,15 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--kinds", help="comma-separated, default: all entity namespaces of the target")
     p.add_argument("--max-seconds", type=float)
     p.add_argument("--max-requests", type=int)
+    p = sub.add_parser("sync-pages")
+    p.add_argument("target")
+    p.add_argument("namespaces", nargs="+", help='namespace names as the wiki spells them, "" for the main namespace')
+    p.add_argument("--max-seconds", type=float)
+    p.add_argument("--max-requests", type=int)
+    p = sub.add_parser("page")
+    p.add_argument("target")
+    p.add_argument("title")
+    p.add_argument("--json", action="store_true", help="the stored record with revision and time, not only the text")
     sub.add_parser("reset").add_argument("target")   # no options on purpose: the questions cannot be skipped
     p = sub.add_parser("get")
     p.add_argument("target")
@@ -266,14 +286,20 @@ def show(config: Config) -> int:
 
 def run_sync(config: Config, target: Target, root: Path, args) -> int:
     from .api import Api
-    from .sync import sync
+    from .sync import sync, sync_pages
 
     api = Api(target, config.operator)
     store = Store(root, config.machine_id, secrets=api.secrets)
-    kinds = args.kinds.split(",") if args.kinds else None
     print(f"Sync {target.name} into {root}")
     try:
-        result = sync(api, store, kinds, args.max_seconds, args.max_requests)
+        if getattr(args, "command", "sync") == "sync-pages":
+            result = sync_pages(api, store, args.namespaces, args.max_seconds, args.max_requests)
+        else:
+            kinds = args.kinds.split(",") if args.kinds else None
+            result = sync(api, store, kinds, args.max_seconds, args.max_requests)
+    except ValueError as error:
+        print(f"Not synced: {error}", file=sys.stderr)
+        return 1
     except LeakError as error:
         print(f"ABORTED: {error} Nothing of that event was written.", file=sys.stderr)
         return 3
